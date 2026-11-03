@@ -1,8 +1,9 @@
+
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException , Query, Path
+from uuid import UUID
 from config import settings
 from enum import Enum
-from fastapi import Query
 from datetime import date
 from typing import Literal
 
@@ -84,5 +85,19 @@ async def search_products(
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.text)
 
+
+    return response.json()
+
+@app.get("/products/{product_id}")
+async def get_product(
+    product_id: UUID = Path(description="Product ID, e.g. 4725d436-3e90-5480-bee1-0f13a7fc14fd"),
+):
+    params = {"$expand": "Attributes"}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(f"{settings.catalogue_url}/{product_id}", params=params)
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
 
     return response.json()
