@@ -39,6 +39,7 @@ class Satellite(str, Enum):
 @app.get("/products")
 async def search_products(
     satellite: Satellite,
+    product_name: str | None = Query(None, description="Product name, e.g. S1A"),
     start_date: date | None = Query(None, description="e.g. 2025-06-01"),
     end_date: date | None = Query(None, description="e.g. 2025-06-30"),
     publication_date_start: date | None = Query(None, description="Published after, e.g. 2025-06-30"),
@@ -48,14 +49,16 @@ async def search_products(
 
     filters = [f"Collection/Name eq '{satellite.value}'"]
 
+    if product_name:
+        filters.append(f"contains(Name,'{product_name}')")
     if start_date:
         filters.append(f"ContentDate/Start gt {start_date}T00:00:00.000Z")
     if end_date:
         filters.append(f"ContentDate/Start lt {end_date}T23:59:59.999Z")
     if publication_date_start:
-        filters.append(f"PublicationDate/Start gt {publication_date_start}T00:00:00.000Z")
+        filters.append(f"PublicationDate gt {publication_date_start}T00:00:00.000Z")
     if publication_date_end:
-        filters.append(f"PublicationDate/End gt {publication_date_end}T23:59:59.999Z")
+        filters.append(f"PublicationDate lt {publication_date_end}T23:59:59.999Z")
 
     params = {
         "$filter": " and ".join(filters),
@@ -66,7 +69,7 @@ async def search_products(
 
     # CDSE CALL
     async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(f"{settings.catalogue_url}/Products", params=params)
+        response = await client.get(f"{settings.catalogue_url}", params=params)
 
     # CDSE ERRORS
     if response.status_code != 200:
