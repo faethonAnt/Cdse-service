@@ -48,6 +48,7 @@ async def search_products(
     top: int = Query(10, ge=1, le=100, description="Max number of results"),
     order_by: Literal["asc","desc"] = Query('asc', description="Sort by sensing date: asc = oldest first / desc = newst first"),
     count : bool = Query(False, description="Show how many products fit the search"),
+    select: list[Literal["Id","Name","ContentType", "ContentLength", "OriginDate", "PublicationDate", "ModificationDate", "Online", "EvictionDate", "S3Path", "Checksum", "ContentDate", "Footprint", "Geofootprint"]] | None = Query(None, description="Choose Product fields"),
 ):
 
     filters = [f"Collection/Name eq '{satellite.value}'"]
@@ -70,6 +71,8 @@ async def search_products(
     }
     if count:
         params["$count"] = "true"
+    if select:
+        params["$select"] = ",".join(select)
 
     print("CDSE filter:", params["$filter"])
 
