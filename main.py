@@ -4,6 +4,7 @@ from config import settings
 from enum import Enum
 from fastapi import Query
 from datetime import date
+from typing import Literal
 
 app = FastAPI(title="CDSE Service")
 
@@ -45,8 +46,8 @@ async def search_products(
     publication_date_start: date | None = Query(None, description="Published after, e.g. 2025-06-30"),
     publication_date_end: date | None = Query(None, description="Published before, e.g. 2025-06-30"),
     top: int = Query(10, ge=1, le=100, description="Max number of results"),
-    order_by: str = Query('asc',
-        description="Order by in ascending or descending order", )
+    order_by: Literal["asc","desc"] = Query('asc', description="Sort by sensing date: asc = oldest first / desc = newst first"),
+    count : bool = Query(False, description="Show how many products fit the search"),
 ):
 
     filters = [f"Collection/Name eq '{satellite.value}'"]
@@ -67,6 +68,9 @@ async def search_products(
         "$top": top,
         "$orderby": f"ContentDate/Start {order_by}",
     }
+    if count:
+        params["$count"] = "true"
+
     print("CDSE filter:", params["$filter"])
 
     # CDSE CALL
