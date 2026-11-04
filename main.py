@@ -52,7 +52,7 @@ class Satellite(str, Enum):
     sentinel1 = "SENTINEL-1"
     sentinel2 = "SENTINEL-2"
     sentinel3 = "SENTINEL-3"
-    sentinel5 = "SENTINEL-5"
+    sentinel5 = "SENTINEL-5P"
     sentinel6 = "SENTINEL-6"
 
 @app.get("/products")
@@ -67,6 +67,8 @@ async def search_products(
     order_by: Literal["asc","desc"] = Query('asc', description="Sort by sensing date: asc = oldest first / desc = newst first"),
     count : bool = Query(False, description="Show how many products fit the search"),
     select: list[Literal["Id","Name","ContentType", "ContentLength", "OriginDate", "PublicationDate", "ModificationDate", "Online", "EvictionDate", "S3Path", "Checksum", "ContentDate", "Footprint", "Geofootprint"]] | None = Query(None, description="Choose Product fields"),
+    area: str | None = Query(None, description="Polygon WKT, lon lad order, first point=last""e.g. POLYGON((23.6 37.9, 23.8 37.9, 23.8 38.1, 23.6 38.1, 23.6 37.9))"),
+
 ):
 
     filters = [f"Collection/Name eq '{satellite.value}'"]
@@ -81,6 +83,8 @@ async def search_products(
         filters.append(f"PublicationDate gt {publication_date_start}T00:00:00.000Z")
     if publication_date_end:
         filters.append(f"PublicationDate lt {publication_date_end}T23:59:59.999Z")
+    if area:
+        filters.append(f"OData.CSC.Intersects(area=geography'SRID=4326;{area}')")
 
     params = {
         "$filter": " and ".join(filters),
