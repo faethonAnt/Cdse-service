@@ -1,5 +1,6 @@
 
 import httpx
+from fastapi.responses import FileResponse
 from fastapi import FastAPI, HTTPException , Query, Path
 from uuid import UUID
 from config import settings
@@ -8,6 +9,22 @@ from datetime import date
 from typing import Literal
 
 app = FastAPI(title="CDSE Service")
+
+async def fetch_token()-> str:
+    data = {
+      "client_id": "cdse-public",
+      "username": settings.cdse_username,
+      "password": settings.cdse_password,
+      "grant_type": "password",
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(settings.token_url, data=data)
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.json()["access_token"]
 
 @app.get("/health")
 def health():
@@ -101,3 +118,29 @@ async def get_product(
         raise HTTPException(status_code=response.status_code, detail=response.text)
 
     return response.json()
+
+
+@app.get("/products/{product_id}/download")
+async def get_product_download(
+    product_id: UUID = Path(description="Product ID")):
+
+    access_token = await fetch_token()
+
+    url = f"{settings.catalogue_download_url}({product_id})/$value"
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    file_path = f"{product_id}.zip"
+
+    async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
+        async with client.stream("GET", url, headers=headers) as response:
+
+            if response.status_code != 200:
+                await response.aread()
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+
+            with open(file_path, "wb") as file:
+                async for chunk in response.aiter_bytes():
+                    file.write(chunk)
+
+    return FileResponse(file_path, media_type="application/zip", filename=f"{product_id}.zip")
