@@ -63,12 +63,14 @@ async def search_products(
     end_date: date | None = Query(None, description="e.g. 2025-06-30"),
     publication_date_start: date | None = Query(None, description="Published after, e.g. 2025-06-30"),
     publication_date_end: date | None = Query(None, description="Published before, e.g. 2025-06-30"),
+    show_cloud: bool = Query(False, description="Add cloud cover % to each product"),
+    max_cloud: float | None = Query(None, ge=0, le=100, description="Max cloud cover % (optical satellites only)"),
     top: int = Query(10, ge=1, le=100, description="Max number of results"),
     order_by: Literal["asc","desc"] = Query('asc', description="Sort by sensing date: asc = oldest first / desc = newst first"),
     count : bool = Query(False, description="Show how many products fit the search"),
     select: list[Literal["Id","Name","ContentType", "ContentLength", "OriginDate", "PublicationDate", "ModificationDate", "Online", "EvictionDate", "S3Path", "Checksum", "ContentDate", "Footprint", "Geofootprint"]] | None = Query(None, description="Choose Product fields"),
     area: str | None = Query(None, description="Polygon WKT, lon lad order, first point=last""e.g. POLYGON((23.6 37.9, 23.8 37.9, 23.8 38.1, 23.6 38.1, 23.6 37.9))"),
-
+    expand_attributes: bool = Query(False, description="Include attributes (cloud cover, product type...)"),
 ):
 
     filters = [f"Collection/Name eq '{satellite.value}'"]
@@ -85,6 +87,11 @@ async def search_products(
         filters.append(f"PublicationDate lt {publication_date_end}T23:59:59.999Z")
     if area:
         filters.append(f"OData.CSC.Intersects(area=geography'SRID=4326;{area}')")
+    if max_cloud is not None:
+        filters.append(
+            "Attributes/OData.CSC.DoubleAttribute/any("
+            f"att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value le {max_cloud})"
+        )
 
     params = {
         "$filter": " and ".join(filters),
@@ -95,6 +102,8 @@ async def search_products(
         params["$count"] = "true"
     if select:
         params["$select"] = ",".join(select)
+    if expand_attributes or show_cloud:
+        params["$expand"] = "Attributes"
 
     print("CDSE filter:", params["$filter"])
 
@@ -106,6 +115,18 @@ async def search_products(
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.text)
 
+    data = response.json()
+    if show_cloud:
+        for product in data["value"]:
+            if expand_attributes:
+                attributes = product.get("Attributes", [])  # keep them
+            else:
+                attributes = product.pop("Attributes", [])  # remove them
+            product["cloudCover"] = next(
+                (att["Value"] for att in attributes if att["Name"] == "cloudCover"),
+                None,
+            )
+    return data
 
     return response.json()
 
